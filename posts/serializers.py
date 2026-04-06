@@ -123,11 +123,13 @@ class PostSerializer(serializers.ModelSerializer):
     def get_my_reaction(self, obj):
         request = self.context.get('request')
         if request and request.user.is_authenticated:
-            r = Reaction.objects.filter(user=request.user, post=obj).first()
-            return r.reaction_type if r else None
+            for r in obj.reactions.all():
+                if r.user_id == request.user.id:
+                    return r.reaction_type
         return None
 
     def get_reaction_summary(self, obj):
-        from django.db.models import Count
-        qs = obj.reactions.values('reaction_type').annotate(count=Count('id'))
-        return {item['reaction_type']: item['count'] for item in qs}
+        summary = {}
+        for r in obj.reactions.all():
+            summary[r.reaction_type] = summary.get(r.reaction_type, 0) + 1
+        return summary

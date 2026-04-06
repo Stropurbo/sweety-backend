@@ -19,6 +19,7 @@ class PostCursorPagination(CursorPagination):
 
 def annotate_posts(queryset, user):
     """Annotate is_liked, is_hidden, is_saved in a single query pass."""
+    from django.db.models import Prefetch
     return queryset.annotate(
         is_liked_by_user=Exists(
             Post.likes.through.objects.filter(post_id=OuterRef('pk'), user_id=user.id)
@@ -29,7 +30,13 @@ def annotate_posts(queryset, user):
         is_saved_by_user=Exists(
             SavedPost.objects.filter(post_id=OuterRef('pk'), user_id=user.id)
         ),
-    ).select_related('author').prefetch_related('media', 'reactions')
+    ).select_related('author').prefetch_related(
+        'media',
+        Prefetch('reactions', queryset=Reaction.objects.select_related('user')),
+        Prefetch('comments', queryset=Comment.objects.select_related('author').prefetch_related(
+            'replies__author', 'likes'
+        ).order_by('created_at')[:5]),
+    )
 
 
 def upload_media(files, resource_type='image'):
@@ -221,6 +228,21 @@ class PostLikeView(APIView):
 
 class CommentCreateView(APIView):
     permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        post = get_object_or_404(Post, pk=pk)
+        page = int(request.query_params.get('page', 1))
+        page_size = 10
+        offset = (page - 1) * page_size
+        comments = Comment.objects.filter(post=post).select_related('author').prefetch_related(
+            'replies__author', 'likes'
+        ).order_by('created_at')[offset:offset + page_size]
+        total = Comment.objects.filter(post=post).count()
+        return Response({
+            'results': CommentSerializer(comments, many=True, context={'request': request}).data,
+            'total': total,
+            'has_more': (offset + page_size) < total,
+        })
 
     def post(self, request, pk):
         post = get_object_or_404(Post, pk=pk)
