@@ -35,7 +35,7 @@ def annotate_posts(queryset, user):
         Prefetch('reactions', queryset=Reaction.objects.select_related('user')),
         Prefetch('comments', queryset=Comment.objects.select_related('author').prefetch_related(
             'replies__author', 'likes'
-        ).order_by('created_at')[:5]),
+        ).order_by('created_at')),
     )
 
 
