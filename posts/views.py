@@ -19,7 +19,6 @@ class PostCursorPagination(CursorPagination):
 
 def annotate_posts(queryset, user):
     """Annotate is_liked, is_hidden, is_saved in a single query pass."""
-    from django.db.models import Prefetch
     return queryset.annotate(
         is_liked_by_user=Exists(
             Post.likes.through.objects.filter(post_id=OuterRef('pk'), user_id=user.id)
@@ -32,10 +31,10 @@ def annotate_posts(queryset, user):
         ),
     ).select_related('author').prefetch_related(
         'media',
-        Prefetch('reactions', queryset=Reaction.objects.select_related('user')),
-        Prefetch('comments', queryset=Comment.objects.select_related('author').prefetch_related(
-            'replies__author', 'likes'
-        ).order_by('created_at')),
+        'reactions',
+        'comments__author',
+        'comments__replies__author',
+        'comments__likes',
     )
 
 
